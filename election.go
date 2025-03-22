@@ -3,6 +3,7 @@ package less
 import (
 	"context"
 	"log/slog"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -17,7 +18,7 @@ type Storage interface {
 
 type Candidate struct {
 	id       string
-	isLeader bool
+	isLeader atomic.Bool
 
 	storage Storage
 	key     string
@@ -30,7 +31,7 @@ type Candidate struct {
 func New(ctx context.Context, storage Storage) *Candidate {
 	cand := &Candidate{
 		id:       uuid.New().String(),
-		isLeader: false,
+		isLeader: atomic.Bool{},
 
 		storage: storage,
 		key:     "leader",
@@ -61,6 +62,7 @@ func follow(ctx context.Context, cand *Candidate) {
 
 		if ok {
 			slog.Info("we acquired leadership")
+			cand.isLeader.Store(true)
 			hold(ctx, cand)
 		}
 	}
@@ -88,11 +90,12 @@ func hold(ctx context.Context, cand *Candidate) {
 
 		if current != cand.id {
 			slog.Warn("we lost leadership")
+			cand.isLeader.Store(false)
 			return
 		}
 	}
 }
 
 func (c *Candidate) IsLeader() bool {
-	return c.isLeader
+	return c.isLeader.Load()
 }

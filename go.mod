@@ -1,4 +1,4 @@
-module github.com/tymbaca/lex
+module github.com/tymbaca/less
 
 go 1.22.5
 

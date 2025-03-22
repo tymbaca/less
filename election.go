@@ -28,7 +28,7 @@ type Candidate struct {
 	renewRate time.Duration
 }
 
-func New(ctx context.Context, storage Storage) *Candidate {
+func New(ctx context.Context, storage Storage, opts ...Option) *Candidate {
 	cand := &Candidate{
 		id:       uuid.New().String(),
 		isLeader: atomic.Bool{},
@@ -41,6 +41,10 @@ func New(ctx context.Context, storage Storage) *Candidate {
 		renewRate: 2 * time.Second,
 	}
 
+	for _, opt := range opts {
+		opt(cand)
+	}
+
 	go follow(ctx, cand)
 
 	return cand
@@ -48,6 +52,7 @@ func New(ctx context.Context, storage Storage) *Candidate {
 
 func follow(ctx context.Context, cand *Candidate) {
 	for {
+		// TODO: move to bottom
 		select {
 		case <-ctx.Done():
 			return
@@ -69,22 +74,28 @@ func follow(ctx context.Context, cand *Candidate) {
 }
 
 func hold(ctx context.Context, cand *Candidate) {
+	errCount := 0
+
 	for {
-		select {
-		case <-ctx.Done():
+		if errCount >= 3 {
+			slog.Warn("we lost leadership")
+			cand.isLeader.Store(false)
 			return
-		case <-time.After(cand.renewRate):
 		}
 
 		err := cand.storage.Renew(ctx, cand.key, time.Now().Add(cand.ttl))
 		if err != nil {
+			// TODO: if we always get error - node will think it has
+			// leadership
 			slog.Error("can't renew", "err", err)
+			errCount++
 			continue
 		}
 
 		current, err := cand.storage.Get(ctx, cand.key)
 		if err != nil {
 			slog.Error("can't get", "err", err)
+			errCount++
 			continue
 		}
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net"
 	"os"
@@ -25,6 +26,31 @@ var _ = func() error {
 	slog.SetLogLoggerLevel(slog.LevelDebug)
 	return nil
 }()
+
+func Example() {
+	ctx := context.Background()
+
+	var storage Storage
+	// Fill with any shared storage implementation
+
+	candidate := New(ctx, storage, WithKey("notify-users"))
+
+	// Put
+	worker := &testWorker{
+		election: candidate,
+		job: func() {
+			// do work
+			fmt.Println("notification sent")
+		},
+	}
+
+	for range time.Tick(1 * time.Minute) {
+		worker.Run()
+	}
+
+	// Now if we run this code on 2 and more nodes, we can be sure that
+	// only one of them will actively run the job
+}
 
 func TestSqlite(t *testing.T) {
 	db, err := sql.Open("sqlite3", "testdata/test.db")

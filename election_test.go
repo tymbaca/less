@@ -76,6 +76,11 @@ func TestSqlite(t *testing.T) {
 		require.NoError(t, err)
 		testALotOfCandidates(t, storage, 100)
 	})
+	t.Run("testALotOfWorkers", func(t *testing.T) {
+		_, err := db.Exec("DELETE FROM less_record")
+		require.NoError(t, err)
+		testALotOfWorkers(t, storage, 100)
+	})
 }
 
 func TestPostgres(t *testing.T) {

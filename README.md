@@ -14,11 +14,11 @@ Here is a simple demo:
 func main() {
 	ctx := context.Background()
 
-	var storage Storage
+	var storage less.Storage
 	// Fill with any shared storage implementation
-    // You can also use our adapters from `adapter` package
+	// You can also use our adapters from `adapter` package
 
-	candidate := New(ctx, storage)
+	candidate := less.New(ctx, storage)
 
 	workFn := func() {
 		if !candidate.IsLeader() {
@@ -43,7 +43,7 @@ If you have multiple workers and you don't want them all to depend on single can
 func main() {
     // ...
 
-	candidate1 := New(ctx, storage, WithKey("work1"))
+	candidate1 := less.New(ctx, storage, less.WithKey("work1"))
 	work1Fn := func() {
 		if !candidate1.IsLeader() {
 			return
@@ -52,7 +52,7 @@ func main() {
 		fmt.Println("notification sent")
 	}
 
-	candidate2 := New(ctx, storage, WithKey("work2"))
+	candidate2 := less.New(ctx, storage, less.WithKey("work2"))
 	work2Fn := func() {
 		if !candidate2.IsLeader() {
 			return

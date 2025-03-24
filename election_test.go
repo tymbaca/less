@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net"
 	"os"
 	"sync/atomic"
@@ -22,16 +21,12 @@ import (
 
 var opts = []Option{WithFollowRate(50 * time.Millisecond), WithHoldRate(50 * time.Millisecond), WithTTL(200 * time.Millisecond)}
 
-var _ = func() error {
-	slog.SetLogLoggerLevel(slog.LevelDebug)
-	return nil
-}()
-
 func Example() {
 	ctx := context.Background()
 
 	var storage Storage
 	// Fill with any shared storage implementation
+	// You can also use our adapters from `adapter` package
 
 	candidate := New(ctx, storage, WithKey("notify-users"))
 

@@ -1,8 +1,8 @@
+// Package less provides storage agnostic leader election.
 package less
 
 import (
 	"context"
-	"log/slog"
 	"sync/atomic"
 	"time"
 
@@ -40,6 +40,7 @@ type Candidate struct {
 	holdRate   time.Duration
 
 	errsToFallback int
+	logger         Logger
 }
 
 // New creates and launches the [Candidate] with default settings.
@@ -50,20 +51,24 @@ func New(ctx context.Context, storage Storage, opts ...Option) *Candidate {
 		isLeader: atomic.Bool{},
 
 		storage: storage,
-		key:     "leader",
+		key:     "default",
 
 		ttl:        10 * time.Second,
 		followRate: 2 * time.Second,
 		holdRate:   2 * time.Second,
 
 		errsToFallback: 3,
+		logger:         noopLogger{},
 	}
 
 	for _, opt := range opts {
 		opt(cand)
 	}
 
-	slog.Debug("following", "id", cand.id)
+	if cand.errsToFallback <= 0 {
+		cand.errsToFallback = 1
+	}
+
 	go follow(ctx, cand)
 
 	return cand
@@ -75,18 +80,20 @@ func (c *Candidate) IsLeader() bool {
 }
 
 func follow(ctx context.Context, cand *Candidate) {
+	cand.logger.Debug("following", "id", cand.id)
+
 	for run := true; run; run = tick(ctx, cand.followRate) {
-		slog.Debug("try to set", "id", cand.id)
+		cand.logger.Debug("try to set", "id", cand.id)
 
 		ok, err := cand.storage.SetNX(ctx, cand.key, cand.id, time.Now().Add(cand.ttl))
 		if err != nil {
-			slog.Error("can't setnx", "id", cand.id, "err", err)
+			cand.logger.Error("can't setnx", "id", cand.id, "err", err)
 			continue
 		}
-		slog.Debug("setnx", "id", cand.id, "ok", ok)
+		cand.logger.Debug("setnx", "id", cand.id, "ok", ok)
 
 		if ok {
-			slog.Info("we acquired leadership", "id", cand.id)
+			cand.logger.Info("we acquired leadership", "id", cand.id)
 			cand.isLeader.Store(true)
 			hold(ctx, cand)
 		}
@@ -99,14 +106,14 @@ func hold(ctx context.Context, cand *Candidate) {
 	for run := true; run && errCount < cand.errsToFallback; run = tick(ctx, cand.holdRate) {
 		err := cand.storage.Renew(ctx, cand.key, time.Now().Add(cand.ttl))
 		if err != nil {
-			slog.Error("can't renew", "id", cand.id, "err", err)
+			cand.logger.Error("can't renew", "id", cand.id, "err", err)
 			errCount++
 			continue
 		}
 
 		current, err := cand.storage.Get(ctx, cand.key)
 		if err != nil {
-			slog.Error("can't get", "id", cand.id, "err", err)
+			cand.logger.Error("can't get", "id", cand.id, "err", err)
 			errCount++
 			continue
 		}
@@ -119,7 +126,7 @@ func hold(ctx context.Context, cand *Candidate) {
 		errCount = 0
 	}
 
-	slog.Warn("we lost leadership", "id", cand.id)
+	cand.logger.Warn("we lost leadership", "id", cand.id)
 	cand.isLeader.Store(false)
 }
 

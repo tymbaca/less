@@ -35,17 +35,16 @@ func Example() {
 
 	candidate := New(ctx, storage, WithKey("notify-users"))
 
-	// Put
-	worker := &testWorker{
-		election: candidate,
-		job: func() {
-			// do work
-			fmt.Println("notification sent")
-		},
+	workFn := func() {
+		if !candidate.IsLeader() {
+			return
+		}
+		// do work
+		fmt.Println("notification sent")
 	}
 
 	for range time.Tick(1 * time.Minute) {
-		worker.Run()
+		workFn()
 	}
 
 	// Now if we run this code on 2 and more nodes, we can be sure that

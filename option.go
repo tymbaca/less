@@ -6,7 +6,7 @@ type Option func(c *Candidate)
 
 // WithID sets the current candidate's ID, wich will be stored in the leader
 // record when he acquires the leadership. If you use this, make sure that all
-// candidates will have diffent IDs (unless you know what you are doing).
+// candidates will have different IDs (unless you know what you are doing).
 //
 // Default: new V4 UUID
 func WithID(id string) Option {

@@ -26,11 +26,17 @@ type Storage interface {
 	SetNX(ctx context.Context, key, val string, deadline time.Time) (bool, error)
 }
 
+type Balancer interface {
+	Register(key string)
+	CanBeLeader() bool
+}
+
 // Candidate constantly tries to acquire the leadership. Once acquire, it tries
 // to renew it's leader record to not lose it.
 type Candidate struct {
 	id       string
 	isLeader atomic.Bool
+	balancer Balancer
 
 	storage Storage
 	key     string
@@ -69,6 +75,10 @@ func New(ctx context.Context, storage Storage, opts ...Option) *Candidate {
 		cand.errsToFallback = 1
 	}
 
+	if cand.balancer != nil {
+		cand.balancer.Register(cand.key)
+	}
+
 	go follow(ctx, cand)
 
 	return cand
@@ -83,6 +93,12 @@ func follow(ctx context.Context, cand *Candidate) {
 	cand.logger.Debug("following", "id", cand.id)
 
 	for run := true; run; run = tick(ctx, cand.followRate) {
+		if cand.balancer != nil {
+			if !cand.balancer.CanBeLeader() {
+				continue
+			}
+		}
+
 		cand.logger.Debug("try to set", "id", cand.id)
 
 		ok, err := cand.storage.SetNX(ctx, cand.key, cand.id, time.Now().Add(cand.ttl))

@@ -26,11 +26,6 @@ type Storage interface {
 	SetNX(ctx context.Context, key, val string, deadline time.Time) (bool, error)
 }
 
-type Balancer interface {
-	Register(key string)
-	CanBeLeader() bool
-}
-
 // Candidate constantly tries to acquire the leadership. Once acquire, it tries
 // to renew it's leader record to not lose it.
 type Candidate struct {
@@ -55,6 +50,7 @@ func New(ctx context.Context, storage Storage, opts ...Option) *Candidate {
 	cand := &Candidate{
 		id:       uuid.New().String(),
 		isLeader: atomic.Bool{},
+		balancer: noopBalancer{},
 
 		storage: storage,
 		key:     "default",
@@ -93,10 +89,8 @@ func follow(ctx context.Context, cand *Candidate) {
 	cand.logger.Debug("following", "id", cand.id)
 
 	for run := true; run; run = tick(ctx, cand.followRate) {
-		if cand.balancer != nil {
-			if !cand.balancer.CanBeLeader() {
-				continue
-			}
+		if !cand.balancer.CanBeLeader() {
+			continue
 		}
 
 		cand.logger.Debug("try to set", "id", cand.id)
@@ -120,6 +114,10 @@ func hold(ctx context.Context, cand *Candidate) {
 	errCount := 0
 
 	for run := true; run && errCount < cand.errsToFallback; run = tick(ctx, cand.holdRate) {
+		if !cand.balancer.CanBeLeader() {
+			continue
+		}
+
 		err := cand.storage.Renew(ctx, cand.key, time.Now().Add(cand.ttl))
 		if err != nil {
 			cand.logger.Error("can't renew", "id", cand.id, "err", err)

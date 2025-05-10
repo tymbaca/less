@@ -1,43 +1,115 @@
 package balancer
 
 import (
+	"context"
 	"sync"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/tymbaca/less/logger"
 )
 
-type Storage interface{}
-
-type Balancer struct {
-	ids       []string
-	nodeCount int // amount of nodes that application runs on
-	storage   Storage
-
-	mu          sync.Mutex
-	keys        []string
-	canBeLeader bool
+type Storage interface {
+	Get(ctx context.Context, keys []string) (map[string]string, error)
 }
 
-func New(nodeCount int, storage Storage) *Balancer {
-	return &Balancer{
-		// id:        uuid.NewString(),
+type Logger = logger.Logger
+
+type Balancer struct {
+	id        string
+	nodeCount int // amount of nodes that application runs on
+	storage   Storage
+	checkRate time.Duration
+
+	mu      sync.Mutex
+	jobKeys []string
+
+	dropCh chan struct{}
+	logger Logger
+}
+
+func New(ctx context.Context, nodeCount int, storage Storage, opts ...Option) *Balancer {
+	bal := &Balancer{
+		id:        uuid.NewString(),
 		nodeCount: nodeCount,
 		storage:   storage,
+		checkRate: 1 * time.Second,
+
+		dropCh: make(chan struct{}),
+		logger: logger.NoopLogger{},
+	}
+
+	for _, opt := range opts {
+		opt(bal)
+	}
+
+	go listen(ctx, bal)
+
+	return bal
+}
+
+func (b *Balancer) ID() string {
+	return b.id
+}
+
+func (b *Balancer) Register(job string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	b.jobKeys = append(b.jobKeys, job)
+}
+
+func (b *Balancer) Drop() chan struct{} {
+	return b.dropCh
+}
+
+func listen(ctx context.Context, b *Balancer) {
+	defer close(b.dropCh)
+
+	for run := true; run; run = tick(ctx, b.checkRate) {
+		b.mu.Lock()
+		jobKeys := b.jobKeys
+		b.mu.Unlock()
+
+		ids, err := b.storage.Get(ctx, jobKeys)
+		if err != nil {
+			b.logger.Error("can't get keys", "keys", jobKeys, "err", err)
+		}
+
+		myJobCount := 0
+		for _, id := range ids {
+			if id == b.id {
+				myJobCount++
+			}
+		}
+
+		if needDrop(len(jobKeys), myJobCount, b.nodeCount) {
+			select {
+			case b.dropCh <- struct{}{}:
+			case <-time.After(5 * time.Second):
+				b.logger.Error("timeout exceeded when sending drop message", "totalJobCount", len(jobKeys), "myJobCount", myJobCount, "nodeCount", b.nodeCount)
+				continue
+			}
+		}
 	}
 }
 
-// func (b *Balancer) ID() string {
-// 	return b.id
-// }
+func needDrop(totalJobCount int, myJobCount int, nodeCount int) bool {
+	// 3 3 0 -> false
+	// 3 3 1 -> false
+	// 3 3 2 -> true
+	// 3 3 3 -> true
 
-func (b *Balancer) Register(key string) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
+	// 10 3 = 4 3 3 -> true
 
-	b.keys = append(b.keys, key)
+	panic("not implemented")
 }
 
-func (b *Balancer) CanBeLeader() bool {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	return b.canBeLeader
+func tick(ctx context.Context, interval time.Duration) bool {
+	select {
+	case <-ctx.Done():
+		return false
+	case <-time.After(interval):
+		return true
+	}
 }

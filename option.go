@@ -1,23 +1,14 @@
 package less
 
-import "time"
+import (
+	"time"
+)
 
 type Option func(c *Candidate)
 
 func WithBalancer(balancer Balancer) Option {
 	return func(c *Candidate) {
 		c.balancer = balancer
-	}
-}
-
-// WithID sets the current candidate's ID, wich will be stored in the leader
-// record when he acquires the leadership. If you use this, make sure that all
-// candidates will have different IDs (unless you know what you are doing).
-//
-// Default: new V4 UUID
-func WithID(id string) Option {
-	return func(c *Candidate) {
-		c.id = id
 	}
 }
 

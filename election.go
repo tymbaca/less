@@ -6,7 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/tymbaca/less/logger"
 )
 
 // Storage is a generic way to access the data storage shared between the
@@ -26,6 +26,8 @@ type Storage interface {
 	SetNX(ctx context.Context, key, val string, deadline time.Time) (bool, error)
 }
 
+type Logger = logger.Logger
+
 // Candidate constantly tries to acquire the leadership. Once acquire, it tries
 // to renew it's leader record to not lose it.
 type Candidate struct {
@@ -41,16 +43,15 @@ type Candidate struct {
 	holdRate   time.Duration
 
 	errsToFallback int
-	logger         Logger
+	logger         logger.Logger
 }
 
 // New creates and launches the [Candidate] with default settings.
 // Settings can be changed with [Option]s.
 func New(ctx context.Context, storage Storage, opts ...Option) *Candidate {
 	cand := &Candidate{
-		id:       uuid.New().String(),
 		isLeader: atomic.Bool{},
-		balancer: noopBalancer{},
+		balancer: noopBalancer{}, // cannot be nil
 
 		storage: storage,
 		key:     "default",
@@ -60,19 +61,18 @@ func New(ctx context.Context, storage Storage, opts ...Option) *Candidate {
 		holdRate:   2 * time.Second,
 
 		errsToFallback: 3,
-		logger:         noopLogger{},
+		logger:         logger.NoopLogger{},
 	}
 
 	for _, opt := range opts {
 		opt(cand)
 	}
 
+	cand.balancer.Register(cand.key)
+	cand.id = cand.balancer.ID()
+
 	if cand.errsToFallback <= 0 {
 		cand.errsToFallback = 1
-	}
-
-	if cand.balancer != nil {
-		cand.balancer.Register(cand.key)
 	}
 
 	go follow(ctx, cand)
@@ -88,11 +88,7 @@ func (c *Candidate) IsLeader() bool {
 func follow(ctx context.Context, cand *Candidate) {
 	cand.logger.Debug("following", "id", cand.id)
 
-	for run := true; run; run = tick(ctx, cand.followRate) {
-		if !cand.balancer.CanBeLeader() {
-			continue
-		}
-
+	for run := true; run; run = tickFollow(ctx, cand) {
 		cand.logger.Debug("try to set", "id", cand.id)
 
 		ok, err := cand.storage.SetNX(ctx, cand.key, cand.id, time.Now().Add(cand.ttl))
@@ -113,11 +109,7 @@ func follow(ctx context.Context, cand *Candidate) {
 func hold(ctx context.Context, cand *Candidate) {
 	errCount := 0
 
-	for run := true; run && errCount < cand.errsToFallback; run = tick(ctx, cand.holdRate) {
-		if !cand.balancer.CanBeLeader() {
-			continue
-		}
-
+	for run := true; run && errCount < cand.errsToFallback; run = tickHold(ctx, cand) {
 		err := cand.storage.Renew(ctx, cand.key, time.Now().Add(cand.ttl))
 		if err != nil {
 			cand.logger.Error("can't renew", "id", cand.id, "err", err)
@@ -142,13 +134,30 @@ func hold(ctx context.Context, cand *Candidate) {
 
 	cand.logger.Warn("we lost leadership", "id", cand.id)
 	cand.isLeader.Store(false)
+
+	// expire the key, so other candidates will be able to acquire leadership
+	err := cand.storage.Renew(ctx, cand.key, time.Now())
+	if err != nil {
+		cand.logger.Error("can't renew", "id", cand.id, "err", err)
+	}
 }
 
-func tick(ctx context.Context, interval time.Duration) bool {
+func tickFollow(ctx context.Context, cand *Candidate) bool {
 	select {
 	case <-ctx.Done():
 		return false
-	case <-time.After(interval):
+	case <-time.After(cand.followRate):
+		return true
+	}
+}
+
+func tickHold(ctx context.Context, cand *Candidate) bool {
+	select {
+	case <-ctx.Done():
+		return false
+	case <-cand.balancer.Drop():
+		return false
+	case <-time.After(cand.holdRate):
 		return true
 	}
 }

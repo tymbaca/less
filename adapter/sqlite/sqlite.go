@@ -52,6 +52,33 @@ func (sq *SqliteStorage) Get(ctx context.Context, key string) (string, error) {
 	return record.val, nil
 }
 
+func (sq *SqliteStorage) List(ctx context.Context, keys []string) (map[string]string, error) {
+	rows, err := sq.db.QueryContext(ctx, `SELECT key, value, deadline FROM less_record WHERE key IN ?`, keys)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make(map[string]string)
+	for rows.Next() {
+		var record record
+		err := rows.Scan(&record.key, &record.val, &record.deadline)
+		if err != nil {
+			return nil, err
+		}
+
+		if record.deadline.Before(time.Now()) {
+			continue
+		}
+
+		result[record.key] = record.val
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
 func (sq *SqliteStorage) SetNX(ctx context.Context, key string, val string, deadline time.Time) (bool, error) {
 	row := sq.db.QueryRowContext(ctx,
 		`INSERT INTO less_record(key, value, deadline) VALUES (?, ?, ?)

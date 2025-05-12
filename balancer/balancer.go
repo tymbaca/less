@@ -10,7 +10,7 @@ import (
 )
 
 type Storage interface {
-	Get(ctx context.Context, keys []string) (map[string]string, error)
+	List(ctx context.Context, keys []string) (map[string]string, error)
 }
 
 type Logger = logger.Logger
@@ -71,7 +71,7 @@ func listen(ctx context.Context, b *Balancer) {
 		jobKeys := b.jobKeys
 		b.mu.Unlock()
 
-		ids, err := b.storage.Get(ctx, jobKeys)
+		ids, err := b.storage.List(ctx, jobKeys)
 		if err != nil {
 			b.logger.Error("can't get keys", "keys", jobKeys, "err", err)
 		}
@@ -95,14 +95,9 @@ func listen(ctx context.Context, b *Balancer) {
 }
 
 func needDrop(totalJobCount int, myJobCount int, nodeCount int) bool {
-	// 3 3 0 -> false
-	// 3 3 1 -> false
-	// 3 3 2 -> true
-	// 3 3 3 -> true
-
-	// 10 3 = 4 3 3 -> true
-
-	panic("not implemented")
+	// add 1 to guarantee the all jobs will be covered even if job count has a remainder after dividing to node count
+	canHave := (totalJobCount / nodeCount) + 1
+	return myJobCount > canHave
 }
 
 func tick(ctx context.Context, interval time.Duration) bool {

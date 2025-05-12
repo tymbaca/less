@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tymbaca/less/adapter/postgres"
 	"github.com/tymbaca/less/adapter/sqlite"
+	"github.com/tymbaca/less/balancer"
 )
 
 var opts = []Option{WithFollowRate(50 * time.Millisecond), WithHoldRate(50 * time.Millisecond), WithTTL(200 * time.Millisecond)}
@@ -264,6 +265,21 @@ func testALotOfWorkers(t *testing.T, storage Storage, count int) {
 
 		require.Equal(t, 0, int(counter.Load()))
 	})
+}
+
+type fullStorage interface {
+	Storage
+	balancer.Storage
+}
+
+func testWithBalancer(t *testing.T, storage fullStorage) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	nodeCount := 3
+	bal := balancer.New(ctx, nodeCount, storage)
+
+	New(ctx, storage, WithBalancer(bal))
 }
 
 type shutdownWrapper struct {

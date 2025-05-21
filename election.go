@@ -57,8 +57,8 @@ func New(ctx context.Context, storage Storage, opts ...Option) *Candidate {
 		key:     "default",
 
 		ttl:        10 * time.Second,
-		followRate: 2 * time.Second,
-		holdRate:   2 * time.Second,
+		followRate: 1 * time.Second,
+		holdRate:   1 * time.Second,
 
 		errsToFallback: 3,
 		logger:         logger.NoopLogger{},
@@ -110,6 +110,7 @@ func hold(ctx context.Context, cand *Candidate) {
 	errCount := 0
 
 	for run := true; run && errCount < cand.errsToFallback; run = tickHold(ctx, cand) {
+		// FIX: add timeout, less then ttl
 		err := cand.storage.Renew(ctx, cand.key, time.Now().Add(cand.ttl))
 		if err != nil {
 			cand.logger.Error("can't renew", "id", cand.id, "err", err)

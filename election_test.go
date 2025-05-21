@@ -277,9 +277,53 @@ func testWithBalancer(t *testing.T, storage fullStorage) {
 	defer cancel()
 
 	nodeCount := 3
-	bal := balancer.New(ctx, nodeCount, storage)
+	jobCount := 9
+	maxJobsPerNode := 4
 
-	New(ctx, storage, WithBalancer(bal))
+	type node struct {
+		idx      int
+		balancer *balancer.Balancer
+		jobs     []*Candidate
+	}
+
+	nodes := make([]node, nodeCount)
+	for inode := range nodeCount {
+		go func() {
+			bal := balancer.New(ctx, nodeCount, storage)
+
+			var jobs []*Candidate
+			for ijob := range jobCount {
+				job := New(ctx, storage,
+					WithBalancer(bal),
+					WithKey(fmt.Sprintf("job%d", ijob)),
+					WithFollowRate(20*time.Millisecond),
+					WithHoldRate(20*time.Millisecond),
+					WithTTL(100*time.Millisecond),
+				)
+				jobs = append(jobs, job)
+			}
+
+			nodes[inode] = node{
+				idx:      inode,
+				balancer: bal,
+				jobs:     jobs,
+			}
+		}()
+	}
+
+	time.Sleep(2 * time.Second)
+	t.Logf("nodes: %#v", nodes)
+
+	for _, node := range nodes {
+		activeJobs := 0
+		for _, job := range node.jobs {
+			if job.IsLeader() {
+				activeJobs++
+			}
+		}
+
+		require.LessOrEqual(t, activeJobs, maxJobsPerNode)
+	}
 }
 
 type shutdownWrapper struct {

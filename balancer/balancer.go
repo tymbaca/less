@@ -83,7 +83,7 @@ func listen(ctx context.Context, b *Balancer) {
 			}
 		}
 
-		if needDrop(len(jobKeys), myJobCount, b.nodeCount) {
+		for range needDrop(len(jobKeys), myJobCount, b.nodeCount) {
 			select {
 			case b.dropCh <- struct{}{}:
 			case <-time.After(5 * time.Second):
@@ -94,10 +94,16 @@ func listen(ctx context.Context, b *Balancer) {
 	}
 }
 
-func needDrop(totalJobCount int, myJobCount int, nodeCount int) bool {
+func needDrop(totalJobCount int, myJobCount int, nodeCount int) int {
 	// add 1 to guarantee the all jobs will be covered even if job count has a remainder after dividing to node count
 	canHave := (totalJobCount / nodeCount) + 1
-	return myJobCount > canHave
+	mustDrop := myJobCount - canHave
+
+	if mustDrop <= 0 {
+		return 0
+	}
+
+	return mustDrop
 }
 
 func tick(ctx context.Context, interval time.Duration) bool {

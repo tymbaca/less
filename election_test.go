@@ -76,6 +76,11 @@ func TestSqlite(t *testing.T) {
 		require.NoError(t, err)
 		testALotOfWorkers(t, storage, 100)
 	})
+	t.Run("testWithBalancer", func(t *testing.T) {
+		_, err := db.Exec("DELETE FROM less_record")
+		require.NoError(t, err)
+		testWithBalancer(t, storage)
+	})
 }
 
 func TestPostgres(t *testing.T) {
@@ -289,6 +294,8 @@ func testWithBalancer(t *testing.T, storage fullStorage) {
 	nodes := make([]node, nodeCount)
 	for inode := range nodeCount {
 		go func() {
+			time.Sleep(time.Duration(inode) * 20 * time.Millisecond)
+
 			bal := balancer.New(ctx, nodeCount, storage)
 
 			var jobs []*Candidate

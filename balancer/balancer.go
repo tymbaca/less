@@ -2,6 +2,7 @@ package balancer
 
 import (
 	"context"
+	"math/rand/v2"
 	"sync"
 	"time"
 
@@ -33,7 +34,7 @@ func New(ctx context.Context, nodeCount int, storage Storage, opts ...Option) *B
 		id:        uuid.NewString(),
 		nodeCount: nodeCount,
 		storage:   storage,
-		checkRate: 1 * time.Second,
+		checkRate: 1*time.Second + time.Duration(rand.IntN(1000))*time.Millisecond,
 
 		dropCh: make(chan struct{}),
 		logger: logger.NoopLogger{},

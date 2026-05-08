@@ -26,7 +26,7 @@ func Example() {
 	ctx := context.Background()
 
 	var storage Storage
-	// Fill with any shared storage implementation
+	// Use any storage implementation
 	// You can also use our adapters from `adapter` package
 
 	candidate := New(ctx, storage, WithKey("notify-users"))

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"os"
 	"sync/atomic"
@@ -278,6 +279,10 @@ type fullStorage interface {
 }
 
 func testWithBalancer(t *testing.T, storage fullStorage) {
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}))
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -296,7 +301,7 @@ func testWithBalancer(t *testing.T, storage fullStorage) {
 		go func() {
 			time.Sleep(time.Duration(inode) * 20 * time.Millisecond)
 
-			bal := balancer.New(ctx, nodeCount, storage)
+			bal := balancer.New(ctx, nodeCount, storage, balancer.WithCheckRate(100*time.Microsecond, 100*time.Microsecond), balancer.WithLogger(logger))
 
 			var jobs []*Candidate
 			for ijob := range jobCount {
@@ -306,6 +311,7 @@ func testWithBalancer(t *testing.T, storage fullStorage) {
 					WithFollowRate(20*time.Millisecond),
 					WithHoldRate(20*time.Millisecond),
 					WithTTL(100*time.Millisecond),
+					WithLogger(logger),
 				)
 				jobs = append(jobs, job)
 			}

@@ -34,7 +34,7 @@ func New(ctx context.Context, nodeCount int, storage Storage, opts ...Option) *B
 		id:        uuid.NewString(),
 		nodeCount: nodeCount,
 		storage:   storage,
-		checkRate: 1*time.Second + time.Duration(rand.IntN(1000))*time.Millisecond,
+		checkRate: 1*time.Second + time.Duration(rand.IntN(500))*time.Millisecond,
 
 		dropCh: make(chan struct{}),
 		logger: logger.NoopLogger{},
@@ -84,9 +84,15 @@ func listen(ctx context.Context, b *Balancer) {
 			}
 		}
 
-		for range needDrop(len(jobKeys), myJobCount, b.nodeCount) {
+		toDrop := needDrop(len(jobKeys), myJobCount, b.nodeCount)
+		if toDrop > 0 {
+			b.logger.Info("must drop leaders", "leadersToDrop", toDrop)
+		}
+
+		for range toDrop {
 			select {
 			case b.dropCh <- struct{}{}:
+				b.logger.Debug("sent drop signal")
 			case <-time.After(5 * time.Second):
 				b.logger.Error("timeout exceeded when sending drop message", "totalJobCount", len(jobKeys), "myJobCount", myJobCount, "nodeCount", b.nodeCount)
 				continue

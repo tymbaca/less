@@ -43,6 +43,17 @@ func WithFollowRate(rate time.Duration) Option {
 	}
 }
 
+// WithCooldown set cooldown duration to be used when [Balancer] (if enabled) sends signal
+// to drop leadership. Current node will wait provided duration before following for new election.
+// Set 0 to disable cooldown.
+//
+// Default: 1 second
+func WithCooldown(dur time.Duration) Option {
+	return func(c *Candidate) {
+		c.cooldownDur = dur
+	}
+}
+
 // WithHoldRate sets the interval at which leader will call [Storage.Renew] to
 // prolong his leadership.
 //

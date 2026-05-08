@@ -42,6 +42,9 @@ type Candidate struct {
 	followRate time.Duration
 	holdRate   time.Duration
 
+	cooldown    time.Time
+	cooldownDur time.Duration
+
 	errsToFallback int
 	logger         logger.Logger
 }
@@ -58,7 +61,9 @@ func New(ctx context.Context, storage Storage, opts ...Option) *Candidate {
 
 		ttl:        10 * time.Second,
 		followRate: 1 * time.Second,
-		holdRate:   1 * time.Second,
+		holdRate:   1 * time.Second, // TODO: add random
+
+		cooldownDur: 1 * time.Second,
 
 		errsToFallback: 3,
 		logger:         logger.NoopLogger{},
@@ -102,7 +107,18 @@ func follow(ctx context.Context, cand *Candidate) {
 			cand.logger.Info("we acquired leadership", "id", cand.id)
 			cand.isLeader.Store(true)
 			hold(ctx, cand)
+
+			if cand.cooldown.After(time.Now()) {
+				sleep(ctx, time.Until(cand.cooldown))
+			}
 		}
+	}
+}
+
+func sleep(ctx context.Context, dur time.Duration) {
+	select {
+	case <-time.After(dur):
+	case <-ctx.Done():
 	}
 }
 
@@ -157,6 +173,8 @@ func tickHold(ctx context.Context, cand *Candidate) bool {
 	case <-ctx.Done():
 		return false
 	case <-cand.balancer.Drop():
+		cand.cooldown = time.Now().Add(cand.cooldownDur)
+		cand.logger.Info("drop signal from balancer")
 		return false
 	case <-time.After(cand.holdRate):
 		return true

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 	"time"
 )
 
@@ -53,7 +54,21 @@ func (sq *SqliteStorage) Get(ctx context.Context, key string) (string, error) {
 }
 
 func (sq *SqliteStorage) List(ctx context.Context, keys []string) (map[string]string, error) {
-	rows, err := sq.db.QueryContext(ctx, `SELECT key, value, deadline FROM less_record WHERE key IN ?`, keys)
+	var keysBuilder strings.Builder
+	keysBuilder.WriteString("(")
+	for i, key := range keys {
+		keysBuilder.WriteString("'")
+		keysBuilder.WriteString(key)
+		keysBuilder.WriteString("'")
+
+		if i != len(keys)-1 {
+			keysBuilder.WriteString(", ")
+		}
+	}
+	keysBuilder.WriteString(")")
+	keysSQL := keysBuilder.String()
+
+	rows, err := sq.db.QueryContext(ctx, `SELECT key, value, deadline FROM less_record WHERE key IN `+keysSQL)
 	if err != nil {
 		return nil, err
 	}

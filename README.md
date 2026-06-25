@@ -69,3 +69,38 @@ func main() {
 This way each of the workers will has it's own indepentend leader election process.
 
 You can integrate this easely with your asynchronous workers. E.g. you can pass it to [go-co-op/gocron](https://github.com/go-co-op/gocron) job scheduler, with their [`WithDistributedElector`](https://pkg.go.dev/github.com/go-co-op/gocron/v2#WithDistributedElector) option (you need to decorate the `Candidate` by yourself to match the interface).
+
+## Balancer
+
+The library provides a way to balance the locks across the candidates. If
+balancer enabled, each candidate will be able to hold M locks, 
+where `M = floor(L/C)+1`, where `L` is total lock (job) count and `C` is total
+candidate count.
+
+Example:
+
+
+```go
+func main() {
+    // ...
+
+    bal := balancer.New(ctx, candidateCount, storage, balancer.WithCheckRate(100*time.Microsecond, 100*time.Microsecond), balancer.WithLogger(logger))
+
+    job1 := New(ctx, storage,
+        WithBalancer(bal),
+        WithKey("job1"),
+    )
+
+    job2 := New(ctx, storage,
+        WithBalancer(bal),
+        WithKey("job2"),
+    )
+
+    job3 := New(ctx, storage,
+        WithBalancer(bal),
+        WithKey("job3"),
+    )
+
+    // ...
+}
+```

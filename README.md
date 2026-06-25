@@ -73,7 +73,7 @@ You can integrate this easely with your asynchronous workers. E.g. you can pass 
 ## Balancer
 
 The library provides a way to balance the locks across the candidates. If
-balancer enabled, each candidate will be able to hold M locks, 
+balancer enabled, each candidate will be able to hold at most `M` locks, 
 where `M = floor(L/C)+1`, where `L` is total lock (job) count and `C` is total
 candidate count.
 

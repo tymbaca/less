@@ -99,7 +99,7 @@ func TestPostgres(t *testing.T) {
 	if err != nil {
 		t.Skip("postgres in not up")
 	}
-	defer conn.Close()
+	conn.Close()
 
 	db, err := sql.Open("postgres", "host=localhost port=5432 user=postgres password=postgres dbname=postgres sslmode=disable")
 	require.NoError(t, err)

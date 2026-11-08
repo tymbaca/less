@@ -62,29 +62,34 @@ func TestSqlite(t *testing.T) {
 
 	storage := sqlite.New(db)
 
-	t.Run("testGeneral", func(t *testing.T) {
-		_, err := db.Exec("DELETE FROM less_record")
+	clearRecords := func(t *testing.T) {
+		t.Helper()
+
+		_, err := db.Exec("DELETE FROM less_keys")
 		require.NoError(t, err)
+
+		_, err = db.Exec("DELETE FROM less_nodes")
+		require.NoError(t, err)
+	}
+
+	t.Run("testGeneral", func(t *testing.T) {
+		clearRecords(t)
 		testGeneral(t, storage)
 	})
 	t.Run("testALotOfCandidates", func(t *testing.T) {
-		_, err := db.Exec("DELETE FROM less_record")
-		require.NoError(t, err)
+		clearRecords(t)
 		testALotOfCandidates(t, storage, 100)
 	})
 	t.Run("testALotOfWorkers", func(t *testing.T) {
-		_, err := db.Exec("DELETE FROM less_record")
-		require.NoError(t, err)
+		clearRecords(t)
 		testALotOfWorkers(t, storage, 100)
 	})
 	t.Run("testWithBalancer", func(t *testing.T) {
-		_, err := db.Exec("DELETE FROM less_record")
-		require.NoError(t, err)
+		clearRecords(t)
 		testWithBalancer(t, storage)
 	})
 	t.Run("testWithBalancerOnlyOneNodeUp", func(t *testing.T) {
-		_, err := db.Exec("DELETE FROM less_record")
-		require.NoError(t, err)
+		clearRecords(t)
 		testWithBalancerOnlyOneNodeUp(t, storage)
 	})
 }
@@ -107,19 +112,26 @@ func TestPostgres(t *testing.T) {
 
 	storage := postgres.New(db)
 
-	t.Run("testGeneral", func(t *testing.T) {
-		_, err := db.Exec("DELETE FROM less.record")
+	clearRecords := func(t *testing.T) {
+		t.Helper()
+
+		_, err := db.Exec("DELETE FROM less.keys")
 		require.NoError(t, err)
+
+		_, err = db.Exec("DELETE FROM less.nodes")
+		require.NoError(t, err)
+	}
+
+	t.Run("testGeneral", func(t *testing.T) {
+		clearRecords(t)
 		testGeneral(t, storage)
 	})
 	t.Run("testALotOfCandidates", func(t *testing.T) {
-		_, err := db.Exec("DELETE FROM less.record")
-		require.NoError(t, err)
+		clearRecords(t)
 		testALotOfCandidates(t, storage, 200)
 	})
 	t.Run("testALotOfWorkers", func(t *testing.T) {
-		_, err := db.Exec("DELETE FROM less.record")
-		require.NoError(t, err)
+		clearRecords(t)
 		testALotOfWorkers(t, storage, 200)
 	})
 }
@@ -435,6 +447,14 @@ func (d downFullStorage) SetNX(ctx context.Context, key, val string, deadline ti
 
 func (d downFullStorage) List(ctx context.Context, keys []string) (map[string]string, error) {
 	return nil, errors.New("node is down")
+}
+
+func (d downFullStorage) ListNodes(ctx context.Context) ([]string, error) {
+	return nil, errors.New("node is down")
+}
+
+func (d downFullStorage) RenewLiveness(ctx context.Context, node string, deadline time.Time) error {
+	return errors.New("node is down")
 }
 
 type shutdownWrapper struct {

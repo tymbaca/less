@@ -12,28 +12,28 @@ Here is a simple demo:
 
 ```go
 func main() {
-	ctx := context.Background()
+    ctx := context.Background()
 
-	var storage less.Storage
-	// Fill with any shared storage implementation
-	// You can also use our adapters from `adapter` package
-
-	candidate := less.New(ctx, storage)
-
-	workFn := func() {
-		if !candidate.IsLeader() {
-			return
-		}
-		// do work
-		fmt.Println("notification sent")
-	}
-
-	for range time.Tick(1 * time.Minute) {
-		workFn()
-	}
-
-	// Now if we run this code on 2 and more nodes, we can be sure that
-	// only one of them will actively run the job
+    var storage less.Storage
+    // Fill with any shared storage implementation
+    // You can also use our adapters from `adapter` package
+    
+    candidate := less.New(ctx, storage)
+    
+    workFn := func() {
+        if !candidate.IsLeader() {
+        	return
+        }
+        // do work
+        fmt.Println("notification sent")
+    }
+    
+    for range time.Tick(1 * time.Minute) {
+        workFn()
+    }
+    
+    // Now if we run this code on 2 and more nodes, we can be sure that
+    // only one of them will actively run the job
 }
 ```
 
@@ -43,24 +43,24 @@ If you have multiple workers and you don't want them all to depend on single can
 func main() {
     // ...
 
-	candidate1 := less.New(ctx, storage, less.WithKey("work1"))
-	work1Fn := func() {
-		if !candidate1.IsLeader() {
-			return
-		}
-		// do work
-		fmt.Println("notification sent")
-	}
-
-	candidate2 := less.New(ctx, storage, less.WithKey("work2"))
-	work2Fn := func() {
-		if !candidate2.IsLeader() {
-			return
-		}
-		// do work
-		fmt.Println("notification sent")
-	}
-
+    candidate1 := less.New(ctx, storage, less.WithKey("work1"))
+    work1Fn := func() {
+        if !candidate1.IsLeader() {
+            return
+        }
+        // do work
+        fmt.Println("notification sent")
+    }
+    
+    candidate2 := less.New(ctx, storage, less.WithKey("work2"))
+    work2Fn := func() {
+        if !candidate2.IsLeader() {
+            return
+        }
+        // do work
+        fmt.Println("notification sent")
+    }
+    
     // etc
     // ...
 }

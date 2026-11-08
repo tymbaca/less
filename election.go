@@ -31,6 +31,9 @@ type Logger = logger.Logger
 // Candidate constantly tries to acquire the leadership. Once acquire, it tries
 // to renew it's leader record to not lose it.
 type Candidate struct {
+	ctx    context.Context
+	cancel context.CancelFunc
+
 	id       string
 	isLeader atomic.Bool
 	balancer Balancer
@@ -52,7 +55,12 @@ type Candidate struct {
 // New creates and launches the [Candidate] with default settings.
 // Settings can be changed with [Option]s.
 func New(ctx context.Context, storage Storage, opts ...Option) *Candidate {
+	ctx, cancel := context.WithCancel(ctx)
+
 	cand := &Candidate{
+		ctx:    ctx,
+		cancel: cancel,
+
 		isLeader: atomic.Bool{},
 		balancer: noopBalancer{}, // cannot be nil
 
@@ -80,9 +88,17 @@ func New(ctx context.Context, storage Storage, opts ...Option) *Candidate {
 		cand.errsToFallback = 1
 	}
 
-	go follow(ctx, cand)
+	go follow(cand)
 
 	return cand
+}
+
+// Close closes internal context. You can cancel the original context
+// passed to [New] instead of calling this.
+func (c *Candidate) Close() error {
+	c.cancel()
+
+	return nil
 }
 
 // IsLeader returns whether this candidate is currently a leader or not.
@@ -90,7 +106,8 @@ func (c *Candidate) IsLeader() bool {
 	return c.isLeader.Load()
 }
 
-func follow(ctx context.Context, cand *Candidate) {
+func follow(cand *Candidate) {
+	ctx := cand.ctx
 	cand.logger.Debug("following", "id", cand.id)
 
 	for run := true; run; run = tickFollow(ctx, cand) {

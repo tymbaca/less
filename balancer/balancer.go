@@ -17,6 +17,9 @@ type Storage interface {
 type Logger = logger.Logger
 
 type Balancer struct {
+	ctx    context.Context
+	cancel context.CancelFunc
+
 	id        string
 	nodeCount int // amount of nodes that application runs on
 	storage   Storage
@@ -30,7 +33,12 @@ type Balancer struct {
 }
 
 func New(ctx context.Context, nodeCount int, storage Storage, opts ...Option) *Balancer {
+	ctx, cancel := context.WithCancel(ctx)
+
 	bal := &Balancer{
+		ctx:    ctx,
+		cancel: cancel,
+
 		id:        uuid.NewString(),
 		nodeCount: nodeCount,
 		storage:   storage,
@@ -44,9 +52,17 @@ func New(ctx context.Context, nodeCount int, storage Storage, opts ...Option) *B
 		opt(bal)
 	}
 
-	go listen(ctx, bal)
+	go listen(bal)
 
 	return bal
+}
+
+// Close closes internal context. You can cancel the original context
+// passed to [New] instead of calling this.
+func (c *Balancer) Close() error {
+	c.cancel()
+
+	return nil
 }
 
 func (b *Balancer) ID() string {
@@ -64,8 +80,9 @@ func (b *Balancer) Drop() chan struct{} {
 	return b.dropCh
 }
 
-func listen(ctx context.Context, b *Balancer) {
+func listen(b *Balancer) {
 	defer close(b.dropCh)
+	ctx := b.ctx
 
 	for run := true; run; run = tick(ctx, b.checkRate) {
 		b.mu.Lock()

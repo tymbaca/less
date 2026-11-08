@@ -82,6 +82,11 @@ func TestSqlite(t *testing.T) {
 		require.NoError(t, err)
 		testWithBalancer(t, storage)
 	})
+	t.Run("testWithBalancerOnlyOneNodeUp", func(t *testing.T) {
+		_, err := db.Exec("DELETE FROM less_record")
+		require.NoError(t, err)
+		testWithBalancerOnlyOneNodeUp(t, storage)
+	})
 }
 
 func TestPostgres(t *testing.T) {
@@ -337,6 +342,96 @@ func testWithBalancer(t *testing.T, storage fullStorage) {
 
 		require.LessOrEqual(t, activeJobs, maxJobsPerNode)
 	}
+}
+
+// testWithBalancerOnlyOneNodeUp checks the corner case where the cluster is
+// configured for several nodes, but only one of them is actually alive. The
+// alive node must run every job instead of dropping the leadership because of
+// the configured node count.
+func testWithBalancerOnlyOneNodeUp(t *testing.T, storage fullStorage) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const (
+		nodeCount = 3
+		jobCount  = 9
+	)
+
+	// node 1 is the only alive node, it works with the real storage.
+	aliveBal := balancer.New(ctx, nodeCount, storage,
+		balancer.WithCheckRate(100*time.Microsecond, 100*time.Microsecond))
+
+	aliveJobs := make([]*Candidate, 0, jobCount)
+	for ijob := range jobCount {
+		aliveJobs = append(aliveJobs, New(ctx, storage,
+			WithBalancer(aliveBal),
+			WithKey(fmt.Sprintf("job%d", ijob)),
+			WithFollowRate(20*time.Millisecond),
+			WithHoldRate(20*time.Millisecond),
+			WithTTL(100*time.Millisecond),
+			WithCooldown(0),
+		))
+	}
+
+	// nodes 2 and 3 are down: every storage call fails, so they can never
+	// acquire a single job.
+	down := downFullStorage{fullStorage: storage}
+	for range nodeCount - 1 {
+		downBal := balancer.New(ctx, nodeCount, down,
+			balancer.WithCheckRate(100*time.Microsecond, 100*time.Microsecond))
+
+		for ijob := range jobCount {
+			_ = New(ctx, down,
+				WithBalancer(downBal),
+				WithKey(fmt.Sprintf("job%d", ijob)),
+				WithFollowRate(20*time.Millisecond),
+				WithHoldRate(20*time.Millisecond),
+				WithTTL(100*time.Millisecond),
+				WithCooldown(0),
+			)
+		}
+	}
+
+	// let node 1 acquire all the jobs and let its balancer react
+	time.Sleep(1 * time.Second)
+
+	// node 1 is the only alive node, so it must run all the jobs. Sample
+	// several times to make sure the leadership is not dropped in between.
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		activeJobs := 0
+		for _, job := range aliveJobs {
+			if job.IsLeader() {
+				activeJobs++
+			}
+		}
+		require.Equal(t, jobCount, activeJobs,
+			"the only alive node must run all %d jobs, but runs %d", jobCount, activeJobs)
+
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// downFullStorage emulates a node that is completely down: all of its storage
+// calls fail.
+type downFullStorage struct {
+	fullStorage
+}
+
+func (d downFullStorage) Renew(ctx context.Context, key string, deadline time.Time) error {
+	return errors.New("node is down")
+}
+
+func (d downFullStorage) Get(ctx context.Context, key string) (string, error) {
+	return "", errors.New("node is down")
+}
+
+func (d downFullStorage) SetNX(ctx context.Context, key, val string, deadline time.Time) (bool, error) {
+	return false, errors.New("node is down")
+}
+
+func (d downFullStorage) List(ctx context.Context, keys []string) (map[string]string, error) {
+	return nil, errors.New("node is down")
 }
 
 type shutdownWrapper struct {

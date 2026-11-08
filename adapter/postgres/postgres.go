@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
+	"strings"
 	"time"
 )
 
@@ -75,14 +77,86 @@ func (sq *PostgresStorage) SetNX(ctx context.Context, key string, val string, de
 	return true, nil
 }
 
-func (p *PostgresStorage) List(ctx context.Context, keys []string) (map[string]string, error) {
-	panic("not implemented") // TODO: lists active records in keys table
+func (sq *PostgresStorage) List(ctx context.Context, keys []string) (map[string]string, error) {
+	if len(keys) == 0 {
+		return map[string]string{}, nil
+	}
+
+	var keysBuilder strings.Builder
+	keysBuilder.WriteString("(")
+	args := make([]any, 0, len(keys))
+	for i, key := range keys {
+		if i > 0 {
+			keysBuilder.WriteString(", ")
+		}
+		fmt.Fprintf(&keysBuilder, "$%d", i+1)
+		args = append(args, key)
+	}
+	keysBuilder.WriteString(")")
+	keysSQL := keysBuilder.String()
+
+	rows, err := sq.db.QueryContext(ctx,
+		`SELECT key, node, deadline FROM less.keys WHERE key IN `+keysSQL, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[string]string)
+	now := time.Now()
+	for rows.Next() {
+		var record record
+		err := rows.Scan(&record.key, &record.val, &record.deadline)
+		if err != nil {
+			return nil, err
+		}
+
+		if record.deadline.Before(now) {
+			continue
+		}
+
+		result[record.key] = record.val
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return result, nil
 }
 
-func (p *PostgresStorage) ListNodes(ctx context.Context) ([]string, error) {
-	panic("not implemented") // TODO: list all active nodes (by comparing time.Now with rows deadline)
+func (sq *PostgresStorage) ListNodes(ctx context.Context) ([]string, error) {
+	rows, err := sq.db.QueryContext(ctx,
+		`SELECT node FROM less.nodes WHERE deadline > $1`, time.Now())
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var nodes []string
+	for rows.Next() {
+		var node string
+		if err := rows.Scan(&node); err != nil {
+			return nil, err
+		}
+
+		nodes = append(nodes, node)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return nodes, nil
 }
 
-func (p *PostgresStorage) RenewLiveness(ctx context.Context, id string, deadline time.Time) error {
-	panic("not implemented") // TODO: inserts or updates deadline
+func (sq *PostgresStorage) RenewLiveness(ctx context.Context, node string, deadline time.Time) error {
+	_, err := sq.db.ExecContext(ctx,
+		`INSERT INTO less.nodes(node, deadline) VALUES ($1, $2)
+                ON CONFLICT (node) DO UPDATE SET 
+                        deadline = EXCLUDED.deadline`,
+		node, deadline)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

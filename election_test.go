@@ -94,7 +94,7 @@ func TestPostgres(t *testing.T) {
 	if err != nil {
 		t.Skip("postgres in not up")
 	}
-	conn.Close()
+	defer conn.Close()
 
 	db, err := sql.Open("postgres", "host=localhost port=5432 user=postgres password=postgres dbname=postgres sslmode=disable")
 	require.NoError(t, err)
@@ -306,11 +306,12 @@ func testWithBalancer(t *testing.T, storage fullStorage) {
 		go func() {
 			time.Sleep(time.Duration(inode) * 20 * time.Millisecond)
 
-			bal := balancer.New(ctx, nodeCount, storage, balancer.WithCheckRate(100*time.Microsecond, 100*time.Microsecond), balancer.WithLogger(logger))
+			bal := balancer.New(ctx, storage, balancer.WithCheckRate(100*time.Microsecond, 100*time.Microsecond), balancer.WithLogger(logger))
 
 			var jobs []*Candidate
 			for ijob := range jobCount {
-				job := New(ctx, storage,
+				job := New(
+					ctx, storage,
 					WithBalancer(bal),
 					WithKey(fmt.Sprintf("job%d", ijob)),
 					WithFollowRate(20*time.Millisecond),
@@ -358,12 +359,13 @@ func testWithBalancerOnlyOneNodeUp(t *testing.T, storage fullStorage) {
 	)
 
 	// node 1 is the only alive node, it works with the real storage.
-	aliveBal := balancer.New(ctx, nodeCount, storage,
+	aliveBal := balancer.New(ctx, storage,
 		balancer.WithCheckRate(100*time.Microsecond, 100*time.Microsecond))
 
 	aliveJobs := make([]*Candidate, 0, jobCount)
 	for ijob := range jobCount {
-		aliveJobs = append(aliveJobs, New(ctx, storage,
+		aliveJobs = append(aliveJobs, New(
+			ctx, storage,
 			WithBalancer(aliveBal),
 			WithKey(fmt.Sprintf("job%d", ijob)),
 			WithFollowRate(20*time.Millisecond),
@@ -377,11 +379,12 @@ func testWithBalancerOnlyOneNodeUp(t *testing.T, storage fullStorage) {
 	// acquire a single job.
 	down := downFullStorage{fullStorage: storage}
 	for range nodeCount - 1 {
-		downBal := balancer.New(ctx, nodeCount, down,
+		downBal := balancer.New(ctx, down,
 			balancer.WithCheckRate(100*time.Microsecond, 100*time.Microsecond))
 
 		for ijob := range jobCount {
-			_ = New(ctx, down,
+			_ = New(
+				ctx, down,
 				WithBalancer(downBal),
 				WithKey(fmt.Sprintf("job%d", ijob)),
 				WithFollowRate(20*time.Millisecond),

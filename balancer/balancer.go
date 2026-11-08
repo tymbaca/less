@@ -36,7 +36,7 @@ type Balancer struct {
 	logger Logger
 }
 
-func New(ctx context.Context, storage Storage, opts ...Option) (*Balancer, error) {
+func New(ctx context.Context, storage Storage, opts ...Option) *Balancer {
 	ctx, cancel := context.WithCancel(ctx)
 
 	bal := &Balancer{
@@ -61,7 +61,7 @@ func New(ctx context.Context, storage Storage, opts ...Option) (*Balancer, error
 	go renewLiveness(bal)
 	go listen(bal)
 
-	return bal, nil
+	return bal
 }
 
 // Close closes internal context. You can cancel the original context

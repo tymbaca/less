@@ -117,9 +117,37 @@ func (sq *SqliteStorage) List(ctx context.Context, keys []string) (map[string]st
 }
 
 func (sq *SqliteStorage) ListNodes(ctx context.Context) ([]string, error) {
-	panic("not implemented") // TODO: list all active nodes (by comparing time.Now with rows deadline)
+	rows, err := sq.db.QueryContext(ctx, `SELECT node FROM less_nodes WHERE deadline > ?`, time.Now())
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var nodes []string
+	for rows.Next() {
+		var node string
+		if err := rows.Scan(&node); err != nil {
+			return nil, err
+		}
+
+		nodes = append(nodes, node)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return nodes, nil
 }
 
 func (sq *SqliteStorage) RenewLiveness(ctx context.Context, node string, deadline time.Time) error {
-	panic("not implemented") // TODO: inserts or updates deadline
+	_, err := sq.db.ExecContext(ctx,
+		`INSERT INTO less_nodes(node, deadline) VALUES (?, ?)
+                ON CONFLICT (node) DO UPDATE SET 
+                        deadline = EXCLUDED.deadline`,
+		node, deadline)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

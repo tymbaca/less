@@ -22,7 +22,7 @@ func main() {
     
     workFn := func() {
         if !candidate.IsLeader() {
-        	return
+            return
         }
         // do work
         fmt.Println("notification sent")

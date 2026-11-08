@@ -149,6 +149,10 @@ func listen(b *Balancer) {
 }
 
 func needDrop(totalJobCount int, myJobCount int, nodeCount int) int {
+	if nodeCount == 0 {
+		return 0
+	}
+
 	// add 1 to guarantee the all jobs will be covered even if job count has a remainder after dividing to node count
 	canHave := (totalJobCount / nodeCount) + 1
 	mustDrop := myJobCount - canHave

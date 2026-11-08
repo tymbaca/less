@@ -23,6 +23,13 @@ import (
 
 var opts = []Option{WithFollowRate(50 * time.Millisecond), WithHoldRate(50 * time.Millisecond), WithTTL(200 * time.Millisecond)}
 
+// sqliteTestDSN points at the test database with synchronous writes disabled.
+// Election tests use sub-second TTLs, so they would otherwise be flaky on
+// filesystems with slow fsync (e.g. a busy disk in WSL), where a single
+// write can take longer than the TTL. Durability of the test database is
+// not what these tests verify.
+const sqliteTestDSN = "testdata/test.db?_synchronous=OFF"
+
 func Example() {
 	ctx := context.Background()
 
@@ -49,7 +56,7 @@ func Example() {
 }
 
 func TestSqlite(t *testing.T) {
-	db, err := sql.Open("sqlite3", "testdata/test.db")
+	db, err := sql.Open("sqlite3", sqliteTestDSN)
 	require.NoError(t, err)
 
 	db.SetMaxOpenConns(1)

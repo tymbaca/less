@@ -84,7 +84,7 @@ Example:
 func main() {
     // ...
 
-    bal := balancer.New(ctx, candidateCount, storage, balancer.WithCheckRate(100*time.Microsecond, 100*time.Microsecond), balancer.WithLogger(logger))
+    bal := balancer.New(ctx, storage, balancer.WithCheckRate(100*time.Microsecond, 100*time.Microsecond), balancer.WithLogger(logger))
 
     job1 := New(ctx, storage,
         WithBalancer(bal),

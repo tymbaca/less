@@ -26,7 +26,7 @@ func New(db *sql.DB) *SqliteStorage {
 }
 
 func (sq *SqliteStorage) Renew(ctx context.Context, key string, deadline time.Time) error {
-	_, err := sq.db.ExecContext(ctx, `UPDATE less_record SET deadline = ? WHERE key = ?`, deadline, key)
+	_, err := sq.db.ExecContext(ctx, `UPDATE less_keys SET deadline = ? WHERE key = ?`, deadline, key)
 	if err != nil {
 		return err
 	}
@@ -35,7 +35,7 @@ func (sq *SqliteStorage) Renew(ctx context.Context, key string, deadline time.Ti
 }
 
 func (sq *SqliteStorage) Get(ctx context.Context, key string) (string, error) {
-	row := sq.db.QueryRowContext(ctx, `SELECT key, value, deadline FROM less_record WHERE key = ?`, key)
+	row := sq.db.QueryRowContext(ctx, `SELECT key, node, deadline FROM less_keys WHERE key = ?`, key)
 
 	var record record
 	err := row.Scan(&record.key, &record.val, &record.deadline)
@@ -53,6 +53,28 @@ func (sq *SqliteStorage) Get(ctx context.Context, key string) (string, error) {
 	return record.val, nil
 }
 
+func (sq *SqliteStorage) SetNX(ctx context.Context, key string, val string, deadline time.Time) (bool, error) {
+	row := sq.db.QueryRowContext(ctx,
+		`INSERT INTO less_keys(key, node, deadline) VALUES (?, ?, ?)
+                ON CONFLICT (key) DO UPDATE SET 
+                        node = EXCLUDED.node,
+                        deadline = EXCLUDED.deadline
+                WHERE 
+                        less_keys.deadline < ?
+                RETURNING node`, key, val, deadline, time.Now())
+
+	var set string
+	err := row.Scan(&set)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+
+	return true, nil
+}
+
 func (sq *SqliteStorage) List(ctx context.Context, keys []string) (map[string]string, error) {
 	var keysBuilder strings.Builder
 	keysBuilder.WriteString("(")
@@ -68,7 +90,7 @@ func (sq *SqliteStorage) List(ctx context.Context, keys []string) (map[string]st
 	keysBuilder.WriteString(")")
 	keysSQL := keysBuilder.String()
 
-	rows, err := sq.db.QueryContext(ctx, `SELECT key, value, deadline FROM less_record WHERE key IN `+keysSQL)
+	rows, err := sq.db.QueryContext(ctx, `SELECT key, node, deadline FROM less_keys WHERE key IN `+keysSQL)
 	if err != nil {
 		return nil, err
 	}
@@ -94,24 +116,10 @@ func (sq *SqliteStorage) List(ctx context.Context, keys []string) (map[string]st
 	return result, nil
 }
 
-func (sq *SqliteStorage) SetNX(ctx context.Context, key string, val string, deadline time.Time) (bool, error) {
-	row := sq.db.QueryRowContext(ctx,
-		`INSERT INTO less_record(key, value, deadline) VALUES (?, ?, ?)
-                ON CONFLICT (key) DO UPDATE SET 
-                        value = EXCLUDED.value,
-                        deadline = EXCLUDED.deadline
-                WHERE 
-                        less_record.deadline < ?
-                RETURNING value`, key, val, deadline, time.Now())
+func (sq *SqliteStorage) ListNodes(ctx context.Context) ([]string, error) {
+	panic("not implemented") // TODO: list all active nodes (by comparing time.Now with rows deadline)
+}
 
-	var set string
-	err := row.Scan(&set)
-	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-
-	return true, nil
+func (sq *SqliteStorage) RenewLiveness(ctx context.Context, node string, deadline time.Time) error {
+	panic("not implemented") // TODO: inserts or updates deadline
 }

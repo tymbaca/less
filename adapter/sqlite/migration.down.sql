@@ -1,1 +1,2 @@
-DROP TABLE IF EXISTS less_record;
+DROP TABLE IF EXISTS less_keys;
+DROP TABLE IF EXISTS less_nodes;

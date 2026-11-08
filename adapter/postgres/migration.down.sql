@@ -1,2 +1,3 @@
-DROP TABLE IF EXISTS less.record;
+DROP TABLE IF EXISTS less.keys;
+DROP TABLE IF EXISTS less.nodes;
 DROP SCHEMA IF EXISTS less;

@@ -2,6 +2,7 @@ package balancer
 
 import (
 	"context"
+	"math"
 	"math/rand/v2"
 	"sync"
 	"time"
@@ -153,8 +154,7 @@ func needDrop(totalJobCount int, myJobCount int, nodeCount int) int {
 		return 0
 	}
 
-	// add 1 to guarantee the all jobs will be covered even if job count has a remainder after dividing to node count
-	canHave := (totalJobCount / nodeCount) + 1
+	canHave := int(math.Ceil(float64(totalJobCount) / float64(nodeCount)))
 	mustDrop := myJobCount - canHave
 
 	if mustDrop <= 0 {

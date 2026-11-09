@@ -1,3 +1,5 @@
+[![Go Reference](https://pkg.go.dev/badge/github.com/tymbaca/less.svg)](https://pkg.go.dev/github.com/tymbaca/less)
+
 # Work less, do more
 
 This library provides storage agnostic leader election.
@@ -24,7 +26,9 @@ func main() {
         if !candidate.IsLeader() {
             return
         }
+
         // do work
+
         fmt.Println("notification sent")
     }
     
@@ -87,18 +91,18 @@ func main() {
     bal := balancer.New(ctx, storage, balancer.WithCheckRate(100*time.Microsecond, 100*time.Microsecond), balancer.WithLogger(logger))
 
     job1 := New(ctx, storage,
-        WithBalancer(bal),
         WithKey("job1"),
+        WithBalancer(bal),
     )
 
     job2 := New(ctx, storage,
-        WithBalancer(bal),
         WithKey("job2"),
+        WithBalancer(bal),
     )
 
     job3 := New(ctx, storage,
-        WithBalancer(bal),
         WithKey("job3"),
+        WithBalancer(bal),
     )
 
     // ...
